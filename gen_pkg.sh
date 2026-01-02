@@ -142,4 +142,3 @@ then
     echo "Building release package."
     python3 -m build > /dev/null
 fi
-
