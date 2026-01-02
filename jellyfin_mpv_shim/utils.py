@@ -372,6 +372,7 @@ def get_text(*path):
 def get_mpv_config_paths():
     """
     Get list of mpv config file paths to check, in priority order.
+
     Respects mpv_ext_no_ovr setting:
     - If False (default): Shim config has highest priority
     - If True: Skip shim config, use only user's global MPV config
@@ -424,7 +425,9 @@ def get_mpv_config_paths():
         if xdg_config:
             xdg_mpv_conf = os.path.join(xdg_config, "mpv", "mpv.conf")
         else:
-            xdg_mpv_conf = os.path.join(os.path.expanduser("~"), ".config", "mpv", "mpv.conf")
+            xdg_mpv_conf = os.path.join(
+                os.path.expanduser("~"), ".config", "mpv", "mpv.conf"
+            )
 
         if os.path.exists(xdg_mpv_conf):
             paths.append(xdg_mpv_conf)
@@ -534,7 +537,9 @@ def get_mpv_config_value(key: str) -> Optional[str]:
             # File was deleted between get_mpv_config_paths() and now
             continue
         except Exception:
-            log.warning(f"Could not read {mpv_conf_path} for key '{key}'", exc_info=True)
+            log.warning(
+                f"Could not read {mpv_conf_path} for key '{key}'", exc_info=True
+            )
             continue
 
     return None

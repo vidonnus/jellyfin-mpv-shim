@@ -190,9 +190,7 @@ class Video(object):
             if alang_str:
                 alang_prefs = parse_language_list(alang_str)
                 if alang_prefs:
-                    selected_aid = self._select_stream_by_language(
-                        "Audio", alang_prefs
-                    )
+                    selected_aid = self._select_stream_by_language("Audio", alang_prefs)
                     if selected_aid is not None:
                         self.aid = selected_aid
                         if settings.log_decisions:
@@ -285,9 +283,7 @@ class Video(object):
 
         # Get all streams of the specified type
         streams = [
-            s
-            for s in self.media_source["MediaStreams"]
-            if s.get("Type") == stream_type
+            s for s in self.media_source["MediaStreams"] if s.get("Type") == stream_type
         ]
 
         if not streams:
@@ -469,9 +465,7 @@ class Video(object):
                 if match:
                     # replace forward slash to backward slashes
                     log.debug("cleaned up credentials from path")
-                    source_path = str(
-                        pathlib.Path("\\\\" + match.groups()[0])
-                    )
+                    source_path = str(pathlib.Path("\\\\" + match.groups()[0]))
 
             source_path = self._apply_path_substitutions(source_path)
             parsed_source_path = urllib.parse.urlparse(source_path)
