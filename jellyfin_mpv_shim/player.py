@@ -546,6 +546,9 @@ class PlayerManager(object):
     # This ensures the task executes outside
     # of an event handler, which causes a crash.
     def put_task(self, func, *args):
+        if self._shutdown_flag:
+            log.debug("Ignoring task during shutdown")
+            return
         self.evt_queue.put([func, args])
         if self.action_trigger:
             self.action_trigger.set()
@@ -553,6 +556,8 @@ class PlayerManager(object):
     # Trigger the timeline to update all
     # clients immediately.
     def timeline_handle(self):
+        if self._shutdown_flag:
+            return
         if self.timeline_trigger:
             self.timeline_trigger.set()
 
@@ -1178,11 +1183,7 @@ class PlayerManager(object):
             return
         try:
             playback_abort = self._safe_get_property("playback_abort", True)
-            if (
-                self.should_send_timeline
-                and self._video
-                and not playback_abort
-            ):
+            if self.should_send_timeline and self._video and not playback_abort:
                 self._video.client.jellyfin.session_progress(
                     self.get_timeline_options()
                 )
