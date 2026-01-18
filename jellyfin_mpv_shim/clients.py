@@ -5,6 +5,7 @@ from . import conffile
 from getpass import getpass
 from .constants import CAPABILITIES, CLIENT_VERSION, USER_APP_NAME, USER_AGENT, APP_NAME
 from .i18n import _
+from .utils import synchronous
 
 import os.path
 import json
@@ -13,6 +14,7 @@ import time
 import logging
 import re
 import threading
+from threading import RLock
 
 import socket
 import ipaddress
@@ -115,6 +117,7 @@ class ClientManager(object):
         self.clients = {}
         self.usernames = {}
         self.is_stopping = False
+        self._lock = RLock()
 
         self.health_check = None
         if settings.health_check_interval is not None:
@@ -124,6 +127,7 @@ class ClientManager(object):
     @staticmethod
     def _get_cli_credential_args():
         from .args import get_args
+
         a = get_args()
         if a.server and a.username:
             return a.server, a.username, a.password
@@ -159,6 +163,7 @@ class ClientManager(object):
 
     def cli_connect(self):
         from .args import get_args
+
         cli_commands = set(get_args().command or [])
 
         is_logged_in = self.try_connect()
@@ -354,7 +359,10 @@ class ClientManager(object):
                 "GET", "Sessions", {"params": None, "timeout": 10, "retry": 1}
             )
         except Exception:
-            log.warning("Health check session query failed; treating as disconnected.", exc_info=True)
+            log.warning(
+                "Health check session query failed; treating as disconnected.",
+                exc_info=True,
+            )
             client_list = []
 
         if client_list is None:
@@ -432,6 +440,7 @@ class ClientManager(object):
         self.save_credentials()
         self._disconnect_client(uuid=uuid)
 
+    @synchronous("_lock")
     def connect_client(self, server, do_retries=True):
         if self.is_stopping:
             return False
@@ -462,6 +471,7 @@ class ClientManager(object):
 
         return is_logged_in
 
+    @synchronous("_lock")
     def _disconnect_client(self, uuid: Optional[str] = None, server=None):
         if uuid is None and server is not None:
             uuid = server["uuid"]
@@ -481,6 +491,7 @@ class ClientManager(object):
         self.credentials = []
         self.save_credentials()
 
+    @synchronous("_lock")
     def stop_all_clients(self):
         for key, client in list(self.clients.items()):
             del self.clients[key]
@@ -488,9 +499,11 @@ class ClientManager(object):
 
     def check_all_clients(self):
         log.info("Performing client health check...")
-        # list() because validate_client may mutate self.clients via the
-        # synthesized WebSocketDisconnect path.
-        for client in list(self.clients.values()):
+        with self._lock:
+            # Snapshot under lock so connect/disconnect callbacks cannot resize the dict.
+            clients_snapshot = list(self.clients.values())
+
+        for client in clients_snapshot:
             self.validate_client(client)
         # Retry credentials that aren't currently connected. Without this, a
         # server that fails the initial connect (e.g. shim started before LAN
@@ -513,6 +526,7 @@ class ClientManager(object):
         for client in self.clients.values():
             client.stop()
 
+    @synchronous("_lock")
     def get_username_from_client(self, client):
         # This is kind of convoluted. It may fail if a server
         # was added before we started saving usernames.
