@@ -55,9 +55,9 @@ if settings.mpv_ext or not python_mpv_available:
 
 # Collect backend-specific exceptions for MPV disconnection/shutdown.
 # libmpv raises ShutdownError; external mpv (jsonipc) raises BrokenPipeError.
-_mpv_errors = (BrokenPipeError,)
+_mpv_errors = (BrokenPipeError, SystemError)
 if hasattr(mpv, "ShutdownError"):
-    _mpv_errors = (BrokenPipeError, mpv.ShutdownError)
+    _mpv_errors = (BrokenPipeError, SystemError, mpv.ShutdownError)
 
 SUBTITLE_POS = {
     "top": 0,
