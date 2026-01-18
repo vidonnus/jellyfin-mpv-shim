@@ -118,6 +118,7 @@ class ClientManager(object):
         self.usernames = {}
         self.is_stopping = False
         self._lock = RLock()
+        self.shutdown_event = threading.Event()
 
         self.health_check = None
         if settings.health_check_interval is not None:
@@ -401,7 +402,8 @@ class ClientManager(object):
                             )
                         )
                         self._disconnect_client(server=server)
-                        time.sleep(timeout)
+                        if self.shutdown_event.wait(timeout):
+                            break
                         if self.connect_client(server, False):
                             break
             elif event_name == "WebSocketConnect":
@@ -522,6 +524,7 @@ class ClientManager(object):
             self.health_check.stop()
             self.health_check = None
 
+        self.shutdown_event.set()
         self.is_stopping = True
         for client in self.clients.values():
             client.stop()
