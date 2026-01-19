@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 def list_request(path: str):
     try:
-        response = urllib.request.urlopen(settings.svp_url + "?" + path)
+        response = urllib.request.urlopen(settings.svp_url + "?" + path, timeout=5)
         return response.read().decode("utf-8").replace("\r\n", "\n").split("\n")
     except urllib.error.URLError:
         log.error("Could not reach SVP API server.", exc_info=True)
@@ -36,6 +36,8 @@ def simple_request(path: str):
 
 def get_profiles():
     profile_ids = list_request("list=profiles")
+    if profile_ids is None:
+        return {}
     profiles = {}
     for profile_id in profile_ids:
         profile_id = profile_id.replace("profiles.", "")
@@ -90,7 +92,10 @@ def set_active_profile(profile_id: str):
         return False
     if profile_id == get_last_profile():
         return True
-    for i in range(len(list_request("list=profiles"))):
+    profile_list = list_request("list=profiles")
+    if profile_list is None:
+        return False
+    for i in range(len(profile_list)):
         list_request("!profile_next")
         if get_last_profile() == profile_id:
             return True
