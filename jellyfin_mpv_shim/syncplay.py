@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from .clients import clientManager
 from .media import Media
 from .i18n import _
+from .utils import execute_command
 
 # This is based on: https://github.com/jellyfin/jellyfin-web/blob/master/src/components/syncPlay/syncPlayManager.js
 
@@ -424,7 +425,7 @@ class SyncPlayManager:
             video = media.video
             if video:
                 if settings.pre_media_cmd:
-                    os.system(settings.pre_media_cmd)
+                    execute_command(settings.pre_media_cmd)
                 self.playerManager.play(
                     video, offset, no_initial_timeline=True, is_initial_play=True
                 )
@@ -433,7 +434,7 @@ class SyncPlayManager:
                 self.join_group(group_id)
                 self.playerManager.timeline_handle()
                 if settings.play_cmd:
-                    os.system(settings.play_cmd)
+                    execute_command(settings.play_cmd)
         elif play_command == "PlayLast":
             self.playerManager.get_video().parent.insert_items(
                 session_data.get("ItemIds"), append=True
@@ -514,10 +515,10 @@ class SyncPlayManager:
     def _play_video(self, video, offset):
         if video:
             if settings.pre_media_cmd:
-                os.system(settings.pre_media_cmd)
+                execute_command(settings.pre_media_cmd)
             self.playerManager.play(video, offset, no_initial_timeline=True)
             if settings.play_cmd:
-                os.system(settings.play_cmd)
+                execute_command(settings.play_cmd)
         else:
             log.error("No video from queue update.")
 

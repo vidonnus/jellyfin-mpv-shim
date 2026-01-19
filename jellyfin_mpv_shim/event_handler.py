@@ -5,6 +5,7 @@ from .conf import settings
 from .media import Media
 from .player import playerManager
 from .timeline import timelineManager
+from .utils import execute_command
 
 log = logging.getLogger("event_handler")
 bindings = {}
@@ -77,13 +78,13 @@ class EventHandler(object):
             video = media.video
             if video:
                 if settings.pre_media_cmd:
-                    os.system(settings.pre_media_cmd)
+                    execute_command(settings.pre_media_cmd)
                 playerManager.play(video, offset, is_initial_play=True)
                 timelineManager.send_timeline()
                 if arguments.get("SyncPlayGroup") is not None:
                     playerManager.syncplay.join_group(arguments["SyncPlayGroup"])
                 if settings.play_cmd:
-                    os.system(settings.play_cmd)
+                    execute_command(settings.play_cmd)
         elif play_command == "PlayLast":
             playerManager.get_video().parent.insert_items(
                 arguments.get("ItemIds"), append=True

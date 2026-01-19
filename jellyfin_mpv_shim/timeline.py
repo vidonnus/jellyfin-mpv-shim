@@ -6,7 +6,7 @@ import jellyfin_apiclient_python.exceptions
 
 from .conf import settings
 from .player import playerManager, _mpv_errors
-from .utils import Timer
+from .utils import Timer, execute_command
 
 log = logging.getLogger("timeline")
 
@@ -34,7 +34,7 @@ class TimelineManager(threading.Thread):
                     if not playerManager.is_paused():
                         self.send_timeline()
                     if self.is_idle and settings.idle_ended_cmd:
-                        os.system(settings.idle_ended_cmd)
+                        execute_command(settings.idle_ended_cmd)
                     self.delay_idle()
 
                 # Dynamic interval based on playback state
@@ -56,7 +56,7 @@ class TimelineManager(threading.Thread):
                     ):
                         playerManager.stop()
                     if settings.idle_cmd:
-                        os.system(settings.idle_cmd)
+                        execute_command(settings.idle_cmd)
                     self.is_idle = True
             except (BrokenPipeError, OSError):
                 # MPV terminated, exit gracefully

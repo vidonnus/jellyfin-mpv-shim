@@ -11,7 +11,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Optional
 
 from . import conffile
-from .utils import synchronous, Timer, none_fallback, get_resource
+from .utils import synchronous, Timer, none_fallback, get_resource, execute_command
 from .conf import settings
 from .menu import OSDMenu
 from .constants import APP_NAME
@@ -755,7 +755,7 @@ class PlayerManager(object):
     @staticmethod
     def exec_stop_cmd():
         if settings.stop_cmd:
-            os.system(settings.stop_cmd)
+            execute_command(settings.stop_cmd)
 
     @synchronous("_lock")
     def stop(self):
@@ -913,7 +913,7 @@ class PlayerManager(object):
                 log.info("PlayerManager::finished_callback No lock, skipping...")
         else:
             if settings.media_ended_cmd:
-                os.system(settings.media_ended_cmd)
+                execute_command(settings.media_ended_cmd)
 
             if self.syncplay.is_enabled():
                 self.syncplay.disable_sync_play(False)

@@ -7,6 +7,8 @@ import logging
 import sys
 import os.path
 import platform
+import subprocess
+import shlex
 
 from .conf import settings
 from datetime import datetime
@@ -58,6 +60,97 @@ def synchronous(tlockname: str):
         return _synchronizer
 
     return _synched
+
+
+def execute_command(cmd: str, timeout: int = 30) -> bool:
+    """
+    Safely execute a shell command with security controls.
+
+    By default, uses subprocess.run with shell=False to prevent command injection.
+    If settings.allow_shell_commands is True, enables shell features (pipes, redirects, etc.)
+    but logs a security warning.
+
+    Args:
+        cmd: Command string to execute
+        timeout: Maximum execution time in seconds (default: 30)
+
+    Returns:
+        True if command succeeded (exit code 0), False otherwise
+
+    Security:
+        - shell=False by default prevents injection attacks
+        - shell=True requires explicit opt-in via allow_shell_commands setting
+        - All execution is logged for security audit
+        - Timeout prevents hanging processes
+    """
+    if not cmd or not cmd.strip():
+        return False
+
+    # Check if shell features are explicitly enabled
+    allow_shell = getattr(settings, "allow_shell_commands", False)
+
+    try:
+        if allow_shell:
+            # Shell mode enabled - supports pipes, redirects, variable expansion
+            # but has security implications
+            log.warning(
+                "WARNING: Executing shell command with shell=True (security risk): %s",
+                cmd[:100],  # Truncate long commands in log
+            )
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                timeout=timeout,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        else:
+            # Secure mode (default) - parse command safely
+            # This prevents injection but doesn't support shell features
+            args = shlex.split(cmd)
+            log.debug("Executing command (secure mode): %s", args[0] if args else cmd)
+            result = subprocess.run(
+                args,
+                shell=False,
+                timeout=timeout,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+
+        # Log result
+        if result.returncode != 0:
+            log.warning(
+                "Command failed with exit code %d: %s", result.returncode, cmd[:100]
+            )
+            if result.stderr:
+                log.debug("Command stderr: %s", result.stderr[:500])
+        else:
+            log.debug("Command succeeded: %s", cmd[:100])
+
+        return result.returncode == 0
+
+    except ValueError as e:
+        # shlex.split() failed - invalid command syntax
+        log.error(
+            "Invalid command syntax: %s - %s. "
+            "If you need shell features (pipes, redirects), set allow_shell_commands=true",
+            cmd[:100],
+            str(e),
+        )
+        return False
+    except subprocess.TimeoutExpired:
+        log.error("Command timed out after %d seconds: %s", timeout, cmd[:100])
+        return False
+    except FileNotFoundError as e:
+        log.error("Command not found: %s - %s", cmd[:100], str(e))
+        return False
+    except Exception as e:
+        log.error(
+            "Failed to execute command: %s - %s", cmd[:100], str(e), exc_info=True
+        )
+        return False
 
 
 def is_local_domain(client: "JellyfinClient_type"):

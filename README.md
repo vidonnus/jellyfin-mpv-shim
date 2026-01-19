@@ -239,6 +239,45 @@ You can execute shell commands on media state using the config file:
 - `stop_idle` - Stop the player when idle. (Requires `idle_when_paused`.) Default: `false`
 - `play_cmd` - After playback starts.
 - `idle_ended_cmd` - After player stops being idle.
+- `allow_shell_commands` - Enable shell features (pipes, redirects, etc.) in commands. Default: `false`
+  - **Security Note:** By default, commands are executed securely without shell interpretation to prevent command injection vulnerabilities.
+  - Simple commands work without enabling this: `notify-send "Done"`, `/path/to/script.sh`, `systemctl suspend`
+  - Enable this only if you need shell features like pipes (`|`), redirects (`>`), or multiple commands (`&&`)
+  - When enabled, a security warning will be logged each time a command executes.
+
+**Example configurations:**
+
+```json
+{
+  "stop_cmd": "notify-send 'Playback stopped'",
+  "play_cmd": "/home/user/scripts/on-play.sh",
+  "idle_cmd": "systemctl suspend"
+}
+```
+
+**For advanced shell features (pipes, redirects, etc.):**
+
+Option 1 - Enable shell mode (less secure):
+```json
+{
+  "media_ended_cmd": "echo 'done' | logger && notify-send 'Finished'",
+  "allow_shell_commands": true
+}
+```
+
+Option 2 - Use a wrapper script (recommended):
+```bash
+# Create /home/user/scripts/on-media-end.sh
+#!/bin/bash
+echo 'done' | logger
+notify-send 'Finished'
+```
+
+```json
+{
+  "media_ended_cmd": "/home/user/scripts/on-media-end.sh"
+}
+```
 
 ### Subtitle Visual Settings
 
