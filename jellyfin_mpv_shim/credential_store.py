@@ -195,7 +195,7 @@ def _set_secure_permissions(file_path: str) -> None:
         log.debug(f"Could not set file permissions: {e}")
 
 
-def load_credentials(file_path: str) -> List[Dict[str, Any]]:
+def load_credentials(file_path: str) -> Tuple[List[Dict[str, Any]], bool]:
     """
     Load credentials from file, handling both encrypted and plain formats.
 
@@ -203,27 +203,30 @@ def load_credentials(file_path: str) -> List[Dict[str, Any]]:
         file_path: Path to credential file
 
     Returns:
-        List[Dict]: List of credential dictionaries (empty list if file doesn't exist)
+        Tuple[List[Dict], bool]: (credential list, needs_migration)
+            - credential list: List of credential dictionaries (empty if file doesn't exist)
+            - needs_migration: True if plain-text credentials were loaded and should be encrypted
     """
     format_type, data = _detect_format(file_path)
 
     if format_type == "missing":
         log.debug("No credential file found, starting fresh")
-        return []
+        return [], False
 
     if format_type == "invalid":
         log.error(f"Credential file is corrupted or invalid: {file_path}")
-        return []
+        return [], False
 
     if format_type == "plain":
-        log.info("Loaded plain-text credentials (will encrypt on next save)")
-        return data if isinstance(data, list) else data
+        log.info("Loaded plain-text credentials (will encrypt immediately)")
+        credentials = data if isinstance(data, list) else data
+        return credentials, True
 
     if format_type == "encrypted":
         log.info("Loaded encrypted credentials")
-        return data
+        return data, False
 
-    return []
+    return [], False
 
 
 def save_credentials(file_path: str, credentials: List[Dict[str, Any]]) -> bool:

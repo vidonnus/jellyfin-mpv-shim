@@ -322,7 +322,9 @@ class ClientManager(object):
 
     def try_connect(self):
         credentials_location = conffile.get(APP_NAME, "cred.json")
-        self.credentials = credential_store.load_credentials(credentials_location)
+        self.credentials, needs_migration = credential_store.load_credentials(
+            credentials_location
+        )
 
         # Handle legacy format (old versions stored dict with "Servers" key)
         if isinstance(self.credentials, dict) and "Servers" in self.credentials:
@@ -332,6 +334,12 @@ class ClientManager(object):
                 server["uuid"] = str(uuid.uuid4())
                 server["username"] = ""
                 self.credentials.append(server)
+            needs_migration = True
+
+        # Immediately encrypt plain-text credentials if encryption is available
+        if needs_migration and self.credentials:
+            log.info("Migrating plain-text credentials to encrypted format")
+            self.save_credentials()
 
         is_logged_in = self._connect_all()
         if settings.connect_retry_mins and not is_logged_in:
