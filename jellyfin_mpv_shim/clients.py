@@ -297,7 +297,11 @@ class ClientManager(object):
                 )
             )
             for attempt in range(settings.connect_retry_mins * 2):
-                time.sleep(30)
+                # Use interruptible wait instead of blocking sleep
+                # This allows graceful shutdown during retry attempts
+                if self.shutdown_event.wait(30):
+                    log.info("Shutdown requested during connection retry")
+                    break
                 is_logged_in = self._connect_all()
                 if is_logged_in:
                     break
