@@ -4,6 +4,7 @@ from jellyfin_apiclient_python import JellyfinClient
 from jellyfin_apiclient_python.connection_manager import CONNECTION_STATE
 from .conf import settings
 from . import conffile
+from . import credential_store
 from getpass import getpass
 from .constants import CAPABILITIES, CLIENT_VERSION, USER_APP_NAME, USER_AGENT, APP_NAME
 from .i18n import _
@@ -321,11 +322,10 @@ class ClientManager(object):
 
     def try_connect(self):
         credentials_location = conffile.get(APP_NAME, "cred.json")
-        if os.path.exists(credentials_location):
-            with open(credentials_location) as cf:
-                self.credentials = json.load(cf)
+        self.credentials = credential_store.load_credentials(credentials_location)
 
-        if "Servers" in self.credentials:
+        # Handle legacy format (old versions stored dict with "Servers" key)
+        if isinstance(self.credentials, dict) and "Servers" in self.credentials:
             credentials_old = self.credentials
             self.credentials = []
             for server in credentials_old["Servers"]:
@@ -354,8 +354,10 @@ class ClientManager(object):
 
     def save_credentials(self):
         credentials_location = conffile.get(APP_NAME, "cred.json")
-        with open(credentials_location, "w") as cf:
-            json.dump(self.credentials, cf)
+        if not credential_store.save_credentials(
+            credentials_location, self.credentials
+        ):
+            log.error("Failed to save credentials")
 
     def login(
         self, server: str, username: str, password: str, force_unique: bool = False

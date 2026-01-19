@@ -44,6 +44,31 @@ Note: Due to the huge number of questions and issues that have been submitted ab
 bare IP addresses and not specifying the port by default. If you want to connect to port 80 instead of
 8096, you must add the `:80` to the URL because `:8096` is now the default.
 
+## Security Features
+
+### Encrypted Credential Storage
+
+Jellyfin MPV Shim can encrypt your access tokens at rest to protect against accidental exposure (e.g., uploading config files to GitHub, cloud backup leaks).
+
+**Installation**:
+```bash
+pip install jellyfin-mpv-shim[secure]
+```
+
+**How it works**:
+- Credentials are encrypted using machine-specific keys
+- Encryption is transparent (no password prompts)
+- Existing plain-text credentials are automatically migrated
+- File permissions are set to user-only (0600 on Unix systems)
+
+**Threat Model**:
+- ✅ Protects against: Accidental file exposure, cloud backup leaks, credentials copied to other machines
+- ❌ Does NOT protect against: Malware on the same machine, local attackers with user access
+
+**Note**: If you don't install the `secure` extra, credentials are stored in plain text with restrictive file permissions. This is acceptable for most users, but we recommend encryption for defense-in-depth security.
+
+**Migration**: When you first save credentials after installing the `secure` extra, existing plain-text credentials are automatically encrypted. No manual action required.
+
 ## Limitations
 
 - Music playback and Live TV are not supported.
@@ -746,16 +771,17 @@ If you are on Linux, you can install via pip. You'll need [libmpv](https://githu
 sudo pip3 install --upgrade jellyfin-mpv-shim
 ```
 
-If you would like the GUI and systray features, also install `pystray` and `tkinter`:
+**Optional Features**:
 
+GUI and systray features:
 ```bash
+sudo pip3 install jellyfin-mpv-shim[gui]
+# OR manually:
 sudo pip3 install pystray
 sudo apt install python3-tk
 ```
 
-If you would like display mirroring support, install the mirroring dependencies (tkinter + Pillow,
-the same packages as the GUI):
-
+Display mirroring support:
 ```bash
 sudo apt install python3-tk python3-pil python3-pil.imagetk
 # -- OR --
@@ -763,9 +789,18 @@ sudo pip3 install jellyfin-mpv-shim[mirror]
 ```
 
 Discord rich presence support:
-
 ```bash
 sudo pip3 install jellyfin-mpv-shim[discord]
+```
+
+Encrypted credential storage (recommended):
+```bash
+sudo pip3 install jellyfin-mpv-shim[secure]
+```
+
+All optional features:
+```bash
+sudo pip3 install jellyfin-mpv-shim[all]
 ```
 
 You can build mpv from source to get better codec support. Execute the following:

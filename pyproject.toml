@@ -29,10 +29,12 @@ Homepage = "https://github.com/jellyfin/jellyfin-mpv-shim"
 gui = ["pystray", "pillow"]
 mirror = ["pillow"]
 discord = ["pypresence"]
+secure = ["cryptography>=3.0"]
 all = [
     "pystray",
     "pypresence",
     "pillow",
+    "cryptography>=3.0",
     "pywin32; sys_platform == 'win32'",
 ]
 
