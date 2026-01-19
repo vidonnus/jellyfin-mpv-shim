@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from jellyfin_apiclient_python import JellyfinClient
 from jellyfin_apiclient_python.connection_manager import CONNECTION_STATE
 from .conf import settings
@@ -77,6 +79,9 @@ def is_local_subnet(host, local_ips, prefix_length=24):
 log = logging.getLogger("clients")
 path_regex = re.compile(r"^(https?://)?(?:(\[[^/]+\])|([^/:]+))(:[0-9]+)?(/.*)?$")
 
+# Maximum allowed URL length (standard limit)
+MAX_URL_LENGTH = 2048
+
 from typing import Optional
 
 
@@ -89,6 +94,45 @@ def expo(max_value: Optional[int] = None):
             n += 1
         else:
             yield max_value
+
+
+def validate_server_url(server: str) -> tuple[bool, Optional[str]]:
+    """
+    Validate server URL for security and format issues.
+
+    Args:
+        server: Server URL string to validate
+
+    Returns:
+        Tuple of (is_valid, error_message)
+        - (True, None) if valid
+        - (False, error_message) if invalid
+
+    Security checks:
+        - Length validation (prevents DoS)
+        - Format validation (prevents crashes)
+        - Input sanitization
+    """
+    # Check for empty/whitespace-only input
+    if not server or not server.strip():
+        return False, "Server URL cannot be empty"
+
+    server = server.strip()
+
+    # Check length to prevent DoS attacks
+    if len(server) > MAX_URL_LENGTH:
+        return False, f"Server URL too long: {len(server)} chars (max {MAX_URL_LENGTH})"
+
+    # Validate URL format with regex
+    match = path_regex.match(server)
+    if match is None:
+        return (
+            False,
+            f"Invalid server URL format: {server}. "
+            "Please use format: http://server:port or https://domain",
+        )
+
+    return True, None
 
 
 class PeriodicHealthCheck(threading.Thread):
@@ -316,10 +360,18 @@ class ClientManager(object):
     def login(
         self, server: str, username: str, password: str, force_unique: bool = False
     ):
+        # Validate server URL for security and format issues
+        is_valid, error_msg = validate_server_url(server)
+        if not is_valid:
+            log.error(f"Server URL validation failed: {error_msg}")
+            return False
+
         if server.endswith("/"):
             server = server[:-1]
 
-        protocol, ipv6_host, ipv4_host, port, path = path_regex.match(server).groups()
+        # Safe to call .groups() now - validation ensures match is not None
+        match = path_regex.match(server)
+        protocol, ipv6_host, ipv4_host, port, path = match.groups()
 
         if not protocol:
             log.warning("Adding http:// because it was not provided.")
