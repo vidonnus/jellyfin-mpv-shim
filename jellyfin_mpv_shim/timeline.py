@@ -75,9 +75,11 @@ class TimelineManager(threading.Thread):
             # Send_timeline sometimes (once every couple hours) gets a 404 response from Jellyfin.
             # Without this try/except that would cause this entire thread to crash keeping it from self-healing.
             playerManager.send_timeline()
-        except jellyfin_apiclient_python.exceptions.HTTPException:
-            # FIXME: Log this
-            pass
+        except jellyfin_apiclient_python.exceptions.HTTPException as e:
+            log.warning(
+                f"Failed to send timeline update to Jellyfin server: {e}. "
+                "This is an expected occasional issue and will self-heal."
+            )
         except _mpv_errors:
             pass
 
