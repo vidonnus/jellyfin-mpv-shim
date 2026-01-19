@@ -1190,7 +1190,7 @@ class PlayerManager(object):
                 try:
                     if self.syncplay.is_enabled():
                         self.syncplay.sync_playback_time()
-                except:
+                except Exception:
                     log.error("Error syncing playback time.", exc_info=True)
         except _mpv_errors:
             log.warning("MPV connection lost during timeline update.")
