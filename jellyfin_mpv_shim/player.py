@@ -702,6 +702,7 @@ class PlayerManager(object):
         self._player.force_media_title = video.get_proper_title()
         self._video = video
         self.is_in_intro = False
+        self._player.show_text("", 0, 1)
         self.external_subtitles = {}
         self.external_subtitles_rev = {}
 
