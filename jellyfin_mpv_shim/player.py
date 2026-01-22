@@ -630,7 +630,8 @@ class PlayerManager(object):
                         self._last_intro_msg_time = time.time()
                     self.is_in_intro = True
                 else:
-                    self._player.show_text("", 0, 1)
+                    if self.is_in_intro:
+                        self._player.show_text("", 0, 1)
                     self.is_in_intro = False
         except _mpv_errors:
             self._handle_mpv_disconnect()
