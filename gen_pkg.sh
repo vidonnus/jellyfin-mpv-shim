@@ -90,7 +90,7 @@ then
 fi
 
 # Generate translations
-find -iname '*.po' | while read -r file
+find . -iname '*.po' | while read -r file
 do
     msgfmt "$file" -o "${file%.*}.mo"
 done
