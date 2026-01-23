@@ -35,8 +35,14 @@ def find_next_unwatched_index(
     """
     Find the index of the next unwatched episode and its resume position.
 
-    This function queries each item to check its PlayedPercentage and UserData
-    to determine which episode should be played next. It returns:
+    Uses the Jellyfin /Shows/NextUp API endpoint for efficient server-side lookup
+    instead of querying each episode individually. This reduces API calls from
+    potentially 1000+ to just 2 (one to get SeriesId, one for NextUp).
+
+    Falls back to batch fetching if NextUp is not available or doesn't return
+    a result.
+
+    Returns:
     1. The first partially watched episode (in progress) with resume position, or
     2. The first unwatched episode with no resume position, or
     3. (None, None) if all episodes are watched
@@ -54,45 +60,174 @@ def find_next_unwatched_index(
         return None, None
 
     try:
-        first_unwatched_index = None
+        # Try the optimized NextUp approach first
+        result = _find_next_unwatched_via_nextup(client, item_ids)
+        if result[0] is not None:
+            return result
 
-        for index, item_id in enumerate(item_ids):
-            try:
-                item = client.jellyfin.get_item(item_id)
-                user_data = item.get("UserData", {})
-
-                # Check if episode is in progress (partially watched)
-                played_percentage = user_data.get("PlayedPercentage", 0)
-                playback_position_ticks = user_data.get("PlaybackPositionTicks", 0)
-
-                if played_percentage > 0 and played_percentage < 100:
-                    if settings.log_decisions:
-                        log.info(
-                            "Found in-progress episode at index %d: %s (%.1f%% watched)",
-                            index,
-                            item.get("Name"),
-                            played_percentage,
-                        )
-                    return index, playback_position_ticks
-
-                # Check if episode is unwatched
-                is_played = user_data.get("Played", False)
-                if not is_played and first_unwatched_index is None:
-                    first_unwatched_index = index
-                    # Don't return yet - keep looking for in-progress episodes
-
-            except Exception as e:
-                log.warning("Error checking item %s: %s", item_id, e)
-                continue
-
-        if first_unwatched_index is not None:
-            return first_unwatched_index, None
-
-        # All episodes are watched, return None to use default behavior
-        return None, None
+        # Fall back to batch fetching if NextUp didn't find anything
+        # This handles edge cases where NextUp might not return results
+        # but there are still unwatched episodes in the queue
+        return _find_next_unwatched_via_batch(client, item_ids)
 
     except Exception as e:
         log.error("Error finding next unwatched episode: %s", e, exc_info=True)
+        return None, None
+
+
+def _find_next_unwatched_via_nextup(
+    client: "JellyfinClient_type", item_ids: List[str]
+) -> tuple[Optional[int], Optional[int]]:
+    """
+    Find next unwatched episode using the /Shows/NextUp API endpoint.
+
+    This is the most efficient approach as it lets the server handle the logic
+    with just 2 API calls total (1 to get SeriesId, 1 for NextUp).
+
+    Args:
+        client: Jellyfin API client
+        item_ids: List of episode item IDs
+
+    Returns:
+        Tuple of (index, resume_ticks) or (None, None) if not found
+    """
+    try:
+        # Get the first episode to find the SeriesId
+        first_item = client.jellyfin.get_item(item_ids[0])
+        series_id = first_item.get("SeriesId")
+
+        if not series_id:
+            if settings.log_decisions:
+                log.info("No SeriesId found, falling back to batch fetch")
+            return None, None
+
+        # Query NextUp for this specific series
+        next_up_result = client.jellyfin.shows(
+            "/NextUp",
+            {
+                "UserId": "{UserId}",
+                "SeriesId": series_id,
+                "Limit": 1,
+                "Fields": "UserData",
+            },
+        )
+
+        items = next_up_result.get("Items", [])
+        if not items:
+            if settings.log_decisions:
+                log.info("NextUp returned no results for series %s", series_id)
+            return None, None
+
+        next_episode = items[0]
+        next_episode_id = next_episode.get("Id")
+
+        # Find the index of this episode in our item_ids list
+        try:
+            index = item_ids.index(next_episode_id)
+        except ValueError:
+            # Episode not in our list (might be from a different season)
+            if settings.log_decisions:
+                log.info(
+                    "NextUp episode %s not in current queue, falling back to batch fetch",
+                    next_episode_id,
+                )
+            return None, None
+
+        # Get resume position if available
+        user_data = next_episode.get("UserData", {})
+        playback_position_ticks = user_data.get("PlaybackPositionTicks", 0)
+        played_percentage = user_data.get("PlayedPercentage", 0)
+
+        # Only return resume position if episode is in progress
+        resume_ticks = playback_position_ticks if played_percentage > 0 else None
+
+        if settings.log_decisions:
+            log.info(
+                "NextUp found episode at index %d: %s (%.1f%% watched)",
+                index,
+                next_episode.get("Name"),
+                played_percentage,
+            )
+
+        return index, resume_ticks
+
+    except Exception as e:
+        if settings.log_decisions:
+            log.info("NextUp lookup failed: %s, falling back to batch fetch", e)
+        return None, None
+
+
+def _find_next_unwatched_via_batch(
+    client: "JellyfinClient_type", item_ids: List[str]
+) -> tuple[Optional[int], Optional[int]]:
+    """
+    Find next unwatched episode by batch fetching all items.
+
+    This is the fallback approach when NextUp doesn't work. It fetches all
+    items in a single API call and processes them locally.
+
+    Args:
+        client: Jellyfin API client
+        item_ids: List of episode item IDs
+
+    Returns:
+        Tuple of (index, resume_ticks) or (None, None) if all watched
+    """
+    try:
+        # Fetch all items in a single API call
+        items_response = client.jellyfin.get_items(item_ids)
+        items = items_response.get("Items", [])
+
+        if not items:
+            return None, None
+
+        # Build a map of item_id -> item for quick lookup
+        items_by_id = {item.get("Id"): item for item in items}
+
+        first_unwatched_index = None
+
+        # Iterate through item_ids to maintain order
+        for index, item_id in enumerate(item_ids):
+            item = items_by_id.get(item_id)
+            if not item:
+                continue
+
+            user_data = item.get("UserData", {})
+            played_percentage = user_data.get("PlayedPercentage", 0)
+            playback_position_ticks = user_data.get("PlaybackPositionTicks", 0)
+
+            # Check if episode is in progress (partially watched)
+            if played_percentage > 0 and played_percentage < 100:
+                if settings.log_decisions:
+                    log.info(
+                        "Batch fetch found in-progress episode at index %d: %s (%.1f%% watched)",
+                        index,
+                        item.get("Name"),
+                        played_percentage,
+                    )
+                return index, playback_position_ticks
+
+            # Check if episode is unwatched
+            is_played = user_data.get("Played", False)
+            if not is_played and first_unwatched_index is None:
+                first_unwatched_index = index
+                # Don't return yet - keep looking for in-progress episodes
+
+        if first_unwatched_index is not None:
+            if settings.log_decisions:
+                log.info(
+                    "Batch fetch found first unwatched episode at index %d",
+                    first_unwatched_index,
+                )
+            return first_unwatched_index, None
+
+        # All episodes are watched
+        if settings.log_decisions:
+            log.info("All episodes are watched")
+        return None, None
+
+    except Exception as e:
+        log.warning("Batch fetch failed: %s", e)
         return None, None
 
 
