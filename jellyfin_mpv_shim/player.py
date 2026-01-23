@@ -1084,6 +1084,53 @@ class PlayerManager(object):
         self._player.sub_color = settings.subtitle_color
         self.timeline_handle()
 
+    def _get_limited_queue(self):
+        """
+        Get a limited window of the queue to send in timeline updates.
+
+        This prevents server overload when playing series with 1000+ episodes.
+        Sends a sliding window of episodes centered around the current position:
+        - 5 episodes before current (for previous episode navigation)
+        - Current episode
+        - 10 episodes after current (for next episode autoplay)
+
+        Total: ~16 episodes instead of potentially 1000+
+
+        Fixes issue #457: Server freeze with large episode counts
+        """
+        if not self._video or not self._video.parent:
+            return []
+
+        full_queue = self._video.parent.queue
+        current_seq = self._video.parent.seq
+        queue_len = len(full_queue)
+
+        # If queue is small enough, send it all
+        if queue_len <= settings.timeline_queue_window:
+            return full_queue
+
+        # Calculate window: 5 before + current + 10 after = 16 total (by default)
+        # Adjust ratio: ~1/3 before, ~2/3 after
+        before_count = settings.timeline_queue_window // 3
+        after_count = settings.timeline_queue_window - before_count - 1
+
+        start_idx = max(0, current_seq - before_count)
+        end_idx = min(queue_len, current_seq + after_count + 1)
+
+        limited_queue = full_queue[start_idx:end_idx]
+
+        if settings.log_decisions:
+            log.info(
+                "Limited queue for timeline: sending %d/%d episodes (indices %d-%d, current=%d)",
+                len(limited_queue),
+                queue_len,
+                start_idx,
+                end_idx - 1,
+                current_seq,
+            )
+
+        return limited_queue
+
     def get_timeline_options(self, finished=False):
         # PlaylistItemId is dynamically generated. A more stable Id will be used
         # if queue manipulation is added as a feature.
@@ -1134,7 +1181,7 @@ class PlayerManager(object):
             "MediaSourceId": self._video.media_source["Id"],
             "CanSeek": True,
             "ItemId": self._video.item_id,
-            "NowPlayingQueue": self._video.parent.queue,
+            "NowPlayingQueue": self._get_limited_queue(),
         }
         if duration is not None:
             options["BufferedRanges"] = [

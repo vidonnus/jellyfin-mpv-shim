@@ -471,6 +471,10 @@ Other miscellaneous configuration options. You probably won't have to change the
   - If you have files with malformed timestamps that don't get marked as played, enable this.
 - `raise_mpv` - Windows only. Disable this if you are fine with MPV sometimes appearing behind other windows when playing.
 - `health_check_interval` - The number of seconds between each client health check. Null disables it. Default: `300`
+- `timeline_queue_window` - Maximum number of episodes to send in timeline updates. Default: `16`
+  - Prevents server overload when playing series with many episodes (1000+).
+  - Uses a sliding window: 5 previous + current + 10 next episodes.
+  - Increase if you need more episodes visible in the Jellyfin queue UI.
 
 ### Skip Intro Support
 

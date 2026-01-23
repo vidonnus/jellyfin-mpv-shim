@@ -148,6 +148,7 @@ class Settings(SettingsBase):
     tls_server_ca: Optional[str] = None
     language_config: Optional[List[LanguageRule]] = None
     allow_shell_commands: bool = False
+    timeline_queue_window: int = 16
 
     def __get_file(self, path: str, mode: str = "r", create: bool = True):
         created = False
