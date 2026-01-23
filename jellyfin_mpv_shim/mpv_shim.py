@@ -100,13 +100,14 @@ def main():
     user_interface.open_player_menu = playerManager.menu.show_menu
     eventHandler.mirror = mirror
     user_interface.start()
-    user_interface.login_servers()
-
-    if not load_success:
-        log.error("Your configuration file is not valid JSON! It has been ignored!")
-        log.info("Tip: Open the JSON file in VS Code to see what is wrong.")
 
     try:
+        user_interface.login_servers()
+
+        if not load_success:
+            log.error("Your configuration file is not valid JSON! It has been ignored!")
+            log.info("Tip: Open the JSON file in VS Code to see what is wrong.")
+
         if mirror:
             user_interface.stop_callback = mirror.stop
             # If the webview runs before the systray icon, it fails.
@@ -116,12 +117,11 @@ def main():
         else:
             halt = Event()
             user_interface.stop_callback = halt.set
-            try:
-                while not halt.wait(timeout=1):
-                    pass
-            except KeyboardInterrupt:
-                print("")
-                log.info("Stopping services...")
+            while not halt.wait(timeout=1):
+                pass
+    except KeyboardInterrupt:
+        print("")
+        log.info("Stopping services...")
     finally:
         # Mark player as shutting down to prevent further operations
         playerManager.shutdown()
