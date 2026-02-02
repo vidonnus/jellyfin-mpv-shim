@@ -239,6 +239,75 @@ def bind(event_name: str):
     return decorator
 
 
+def _summarize_play_arguments(arguments: dict) -> dict:
+    item_ids = arguments.get("ItemIds") or []
+    item_ids_count = len(item_ids) if isinstance(item_ids, list) else None
+    summary = {
+        "keys": sorted(arguments.keys()),
+        "start_index": arguments.get("StartIndex"),
+        "item_id": arguments.get("ItemId"),
+        "item_ids_count": item_ids_count,
+        "item_ids_type": type(item_ids).__name__,
+        "play_command": arguments.get("PlayCommand"),
+        "start_position_ticks": arguments.get("StartPositionTicks"),
+        "media_source_id": arguments.get("MediaSourceId"),
+        "controlling_user_id": arguments.get("ControllingUserId"),
+        "session_id": arguments.get("SessionId"),
+    }
+    return summary
+
+
+def _should_auto_select_unwatched(
+    client: "JellyfinClient_type", item_ids: List[str]
+) -> bool:
+    if not item_ids:
+        return False
+
+    try:
+        items_response = client.jellyfin.get_items(item_ids)
+        items = items_response.get("Items", [])
+        if not items:
+            return False
+
+        items_by_id = {item.get("Id"): item for item in items}
+        index_numbers = []
+        season_numbers = set()
+        series_ids = set()
+
+        for item_id in item_ids:
+            item = items_by_id.get(item_id)
+            if not item:
+                return False
+            index_number = item.get("IndexNumber")
+            season_number = item.get("ParentIndexNumber")
+            series_id = item.get("SeriesId")
+            if index_number is None:
+                return False
+            index_numbers.append(index_number)
+            if season_number is not None:
+                season_numbers.add(season_number)
+            if series_id is not None:
+                series_ids.add(series_id)
+
+        if season_numbers and len(season_numbers) > 1:
+            return False
+        if series_ids and len(series_ids) > 1:
+            return False
+
+        if index_numbers[0] != 1:
+            return False
+
+        for prior, current in zip(index_numbers, index_numbers[1:]):
+            if current != prior + 1:
+                return False
+
+        return True
+
+    except Exception as e:
+        log.info("Season detection failed: %s", e)
+        return False
+
+
 class EventHandler(object):
     mirror = None
 
@@ -264,19 +333,46 @@ class EventHandler(object):
             seq = arguments.get("StartIndex")
             item_ids = arguments.get("ItemIds")
             resume_ticks = None
+            explicit_item_id = arguments.get("ItemId")
+            item_count = len(item_ids) if item_ids else 0
 
-            # If StartIndex is not provided, try to find the next unwatched episode
+            log.info(
+                "PlayNow received: StartIndex=%s ItemId=%s ItemIds=%d",
+                seq,
+                explicit_item_id,
+                item_count,
+            )
+
+            # If StartIndex is not provided, honor explicit ItemId selection first
+            if seq is None and item_ids:
+                if explicit_item_id:
+                    try:
+                        seq = item_ids.index(explicit_item_id)
+                        log.info("Explicit ItemId matched at index %d", seq)
+                        if settings.log_decisions:
+                            log.info("Using explicit ItemId selection at index %d", seq)
+                    except ValueError:
+                        log.info("Explicit ItemId not found in ItemIds")
+                        seq = None
+
+            # If still no StartIndex, try to find the next unwatched episode
             if seq is None and item_ids and len(item_ids) > 1:
-                next_unwatched, resume_ticks = find_next_unwatched_index(
-                    client, item_ids
-                )
-                if next_unwatched is not None:
-                    seq = next_unwatched
-                    if settings.log_decisions:
-                        log.info("Auto-selected episode at index %d", seq)
+                if _should_auto_select_unwatched(client, item_ids):
+                    next_unwatched, resume_ticks = find_next_unwatched_index(
+                        client, item_ids
+                    )
+                    if next_unwatched is not None:
+                        seq = next_unwatched
+                        log.info("Auto-selected next unwatched index %d", seq)
+                        if settings.log_decisions:
+                            log.info("Auto-selected episode at index %d", seq)
+                    else:
+                        log.info("No unwatched episode found; defaulting to index 0")
+                        seq = 0
                 else:
                     seq = 0
             elif seq is None:
+                log.info("No StartIndex/ItemId; defaulting to index 0")
                 seq = 0
 
             media = Media(
